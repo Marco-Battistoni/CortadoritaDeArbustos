@@ -1,0 +1,71 @@
+#include <L298N.h>
+
+// Definición de pines
+const unsigned int IN1 = 32;
+const unsigned int IN2 = 25;
+const unsigned int ENA = 33;
+const unsigned int IN3 = 19;
+const unsigned int IN4 = 18;
+const unsigned int ENB = 5;
+unsigned long tiempoSierra;
+unsigned long tiempoMotorBackward;
+
+// Sensores
+const int Trigger = 17;   // Pin digital para el Trigger del sensor
+const int Echo = 16;      // Pin digital para el Echo del sensor
+
+// Crear instancias del motor
+L298N motori(ENA, IN1, IN2);
+L298N motord(ENB, IN3, IN4);
+
+void setup() {
+  // Inicializar comunicación serial
+  Serial.begin(115200);
+
+  // Establecer la velocidad inicial
+  motori.setSpeed(230);
+  motord.setSpeed(230);
+
+  // Configurar pines del sensor
+  pinMode(Trigger, OUTPUT);
+  pinMode(Echo, INPUT);
+  digitalWrite(Trigger, LOW);  // Inicializamos el Trigger en bajo
+}
+
+void loop() {
+  digitalWrite(Trigger, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(Trigger, LOW);
+
+  long t = pulseIn(Echo, HIGH); // Obtener el ancho del pulso
+  long d = t / 59; // Escalar el tiempo a una distancia en cm
+
+  Serial.print("Distancia: ");
+  Serial.print(d);
+  Serial.println(" cm");
+
+  if (d < 6) {
+    tiempoSierra = millis();
+    motori.stop();
+    motord.stop();
+    motorsierra.forward();
+    if (millis() - tiempoSierra >= 5000) {
+      motorsierra.stop()
+      tiempoMotorBackward = millis()
+      motori.backward()
+      motord.backward()
+      if (millis() - tiempoMotorBackward >= 3000) {
+        motori.stop()
+        motord.stop()
+      }
+    }
+  } else if (d < 100) {
+    motori.forward();
+    motord.forward();
+  } else {
+    motori.forward();
+    motord.stop();
+  }
+
+  delay(50);
+}
