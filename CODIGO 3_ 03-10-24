@@ -1,0 +1,136 @@
+#include <L298N.h>
+
+// Definición de pines
+const unsigned int IN1 = 32;
+const unsigned int IN2 = 25;
+const unsigned int ENA = 33;
+const unsigned int IN3 = 19;
+const unsigned int IN4 = 18;
+const unsigned int ENB = 5;
+const unsigned int relayPin = 26; // Pin del relé
+
+// Sensores
+const int Trigger = 17;   // Pin digital para el Trigger del sensor
+const int Echo = 16;      // Pin digital para el Echo del sensor
+
+// Crear instancias del motor
+L298N motori(ENA, IN1, IN2);
+L298N motord(ENB, IN3, IN4);
+
+unsigned long tiempoInicioRele = 0;
+unsigned long tiempoInicioReversa = 0;
+unsigned long tiempoInicioAvanceLento = 0;
+unsigned long tiempoInicioGiro = 0;
+unsigned long tiempoUltimaLectura = 0;
+bool relayEncendido = false;
+bool enReversa = false;
+bool cortando = false;
+bool avanzandoLento = false;
+bool girando = false;
+bool objetoDetectado = false;
+
+const unsigned long INTERVALO_SENSOR = 50; // Intervalo del sensor en milisegundos
+const unsigned long PAUSA_GIRO = 120; // Pausa al girar en milisegundos
+
+void setup() {
+  Serial.begin(115200);
+
+  // Configurar la velocidad de los motores
+  motori.setSpeed(70); // Velocidad estándar
+  motord.setSpeed(70);
+
+  // Configurar pines del sensor y del relé
+  pinMode(Trigger, OUTPUT);
+  pinMode(Echo, INPUT);
+  digitalWrite(Trigger, LOW);
+
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW);
+}
+
+void loop() {
+  unsigned long tiempoActual = millis();
+
+  if (!cortando) { // Solo leer el sensor si no está cortando
+    // Solo leer el sensor si ha pasado el intervalo definido
+    if (tiempoActual - tiempoUltimaLectura >= INTERVALO_SENSOR) {
+      tiempoUltimaLectura = tiempoActual;
+
+      // Emitir pulso desde el Trigger
+      digitalWrite(Trigger, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(Trigger, LOW);
+
+      // Medir el tiempo del pulso del Echo
+      long t = pulseIn(Echo, HIGH);
+      long d = t / 59;
+
+      Serial.print("Distancia: ");
+      Serial.print(d);
+      Serial.println(" cm");
+
+      if (d <= 6) {
+        cortando = true;
+        relayEncendido = true;
+        digitalWrite(relayPin, HIGH);
+        motori.stop();
+        motord.stop();
+        tiempoInicioRele = millis();
+      } else if (d < 100) {
+        objetoDetectado = true;
+        if (!avanzandoLento) {
+          tiempoInicioAvanceLento = millis();
+          avanzandoLento = true;
+          motori.setSpeed(70); // Velocidad reducida inicial
+          motord.setSpeed(70);
+          motori.forward();
+          motord.forward();
+        }
+      } else {
+        if (!girando) {
+          girando = true;
+          tiempoInicioGiro = millis();
+          delay(PAUSA_GIRO); // Pausa al comenzar a girar
+        }
+        motori.setSpeed(60); // Velocidad reducida en el giro
+        motord.setSpeed(60);
+        motori.forward();
+        motord.stop();
+      }
+    }
+  } else {
+    if (millis() - tiempoInicioRele >= 5000 && relayEncendido) {
+      digitalWrite(relayPin, LOW);
+      relayEncendido = false;
+      motori.backward();
+      motord.backward();
+      enReversa = true;
+      tiempoInicioReversa = millis();
+      cortando = false;
+    }
+  }
+
+  if (avanzandoLento) {
+    if (millis() - tiempoInicioAvanceLento >= 1000) {
+      motori.setSpeed(70); // Velocidad estándar
+      motord.setSpeed(70);
+      avanzandoLento = false;
+    }
+  } else if (enReversa) {
+    if (millis() - tiempoInicioReversa >= 3000) {
+      motori.stop();
+      motord.stop();
+      enReversa = false;
+    }
+  } else if (girando) {
+    if (millis() - tiempoInicioGiro >= 2000) {
+      motori.setSpeed(70); // Velocidad estándar
+      motord.setSpeed(70);
+      girando = false;
+      delay(PAUSA_GIRO); // Pausa al terminar de girar
+    }
+  }
+
+  // Esperar el intervalo de sensor para la próxima lectura
+  delay(INTERVALO_SENSOR); // Asegura que el ciclo de loop se ejecute aproximadamente cada 50 ms
+}
